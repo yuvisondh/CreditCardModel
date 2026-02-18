@@ -8,6 +8,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, average_precision_score,precision_recall_curve
 from tensorflow import keras
 
+from imblearn.over_sampling import SMOTE
+
 # Load the dataset
 df = pd.read_csv('creditcard.csv')
 # Check for missing values
@@ -38,6 +40,10 @@ scaler = StandardScaler()
 
 X_train[['Time', 'Amount']] = scaler.fit_transform(X_train[['Time', 'Amount']])
 X_test[['Time', 'Amount']]  = scaler.transform(X_test[['Time', 'Amount']])
+
+# Handle class imbalance using SMOTE
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
 
 
