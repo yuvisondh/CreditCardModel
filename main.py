@@ -18,7 +18,26 @@ print(df.head())
 print(df.shape)
 print(df['Class'].value_counts())
 
-X = df.drop('Class', axis=1)
-y = df['Class']
+
+# Split the data into training and testing sets
+
+X = df.drop('Class', axis=1) # Features (all columns except 'Class')
+y = df['Class'] # Target variable (the 'Class' column) or Label 
+
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,      # 20% saved for testing, 80% for training
+    random_state=42,    
+    stratify=y       
+)   
+
+# Scale the features
+scaler = StandardScaler()
+
+X_train[['Time', 'Amount']] = scaler.fit_transform(X_train[['Time', 'Amount']])
+X_test[['Time', 'Amount']]  = scaler.transform(X_test[['Time', 'Amount']])
+
 
 
