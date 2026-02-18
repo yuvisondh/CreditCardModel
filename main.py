@@ -9,7 +9,16 @@ from sklearn.metrics import classification_report, average_precision_score,preci
 from tensorflow import keras
 
 # Load the dataset
-data = pd.read_csv('creditcard.csv')
+df = pd.read_csv('creditcard.csv')
 # Check for missing values
-print(data.isnull().sum())
+print(df.isnull().sum())
+
+print(df.head())
+
+print(df.shape)
+print(df['Class'].value_counts())
+
+X = df.drop('Class', axis=1)
+y = df['Class']
+
 
