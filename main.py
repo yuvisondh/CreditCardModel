@@ -60,9 +60,10 @@ model = keras.Sequential([
 model.compile(
     optimizer='adam', # used adaptive learning rate optimization algorithm that is efficient and widely used for training deep learning models.
     loss='binary_crossentropy', # used for binary classification problems, where the target variable has two classes (0 and 1). It measures the difference between the predicted probabilities and the actual class labels.
-    metrics=['accuracy', keras.metrics.Precision(), keras.metrics.Recall()]
-
+    metrics=['accuracy', keras.metrics.Precision(name='precision'), keras.metrics.Recall(name='recall'), 
+             keras.metrics.AUC(curve='ROC', name='auc_roc'), keras.metrics.AUC(curve='PR', name='auc_pr')]
 )
+
 
 # Train the model
 early_stop = keras.callbacks.EarlyStopping(
@@ -73,10 +74,10 @@ early_stop = keras.callbacks.EarlyStopping(
 history = model.fit(
     X_train_resampled,
     y_train_resampled,
-    epochs=100,
-    batch_size=32,
+    epochs= 50,
+    batch_size= 2048,
     callbacks=[early_stop],
-    validation_split=0.1, # 20% of the training data is used for validation during training. This helps to monitor the model's performance on unseen data and prevent overfitting
+    validation_split=0.2, # 20% of the training data is used for validation during training. This helps to monitor the model's performance on unseen data and prevent overfitting
     verbose=1)
 
 plt.figure(figsize=(12, 4))
@@ -94,6 +95,12 @@ plt.title('Accuracy Over Epochs')
 plt.legend()
 
 plt.show()
+
+# Evaluate the model on the test set
+y_pred_prob = model.predict(X_test).flatten() # Get predicted probabilities for the positive class
+y_pred = (y_pred_prob > 0.5).astype(int) # Convert probabilities
+
+print(classification_report(y_test, y_pred))
 
 
 
