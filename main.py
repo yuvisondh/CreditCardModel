@@ -48,10 +48,10 @@ X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 # Build the neural network model    
 model = keras.Sequential([
     keras.layers.Dense(64, activation='relu', input_shape=(X_train_resampled.shape[1],)),
-    keras.layers.dropout(0.3),  # Dropout layer to prevent overfitting
+    keras.layers.Dropout(0.3),  # Dropout layer to prevent overfitting
 
     keras.layers.Dense(32, activation='relu'),
-    keras.layers.dropout(0.3),
+    keras.layers.Dropout(0.3),
 
     keras.layers.Dense(16, activation='relu'),
     keras.layers.Dense(1, activation='sigmoid')  # Output layer for binary classification 0 or 1
@@ -63,6 +63,37 @@ model.compile(
     metrics=['accuracy', keras.metrics.Precision(), keras.metrics.Recall()]
 
 )
+
+# Train the model
+early_stop = keras.callbacks.EarlyStopping(
+    monitor='val_loss', # monitors the validation loss during training. If the validation loss does not improve for a specified number of epochs (patience), the training will be stopped to prevent overfitting.
+    patience= 5,       # number of epochs with no improvement after which training will be stopped.
+    restore_best_weights=True # restores the model weights from the epoch with the best validation loss, ensuring that the best-performing model is retained even if training is stopped early.
+)
+history = model.fit(
+    X_train_resampled,
+    y_train_resampled,
+    epochs=100,
+    batch_size=32,
+    callbacks=[early_stop],
+    validation_split=0.1, # 20% of the training data is used for validation during training. This helps to monitor the model's performance on unseen data and prevent overfitting
+    verbose=1)
+
+plt.figure(figsize=(12, 4))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Val Loss')
+plt.title('Loss Over Epochs')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+plt.title('Accuracy Over Epochs')
+plt.legend()
+
+plt.show()
 
 
 
