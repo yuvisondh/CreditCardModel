@@ -8,6 +8,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, average_precision_score,precision_recall_curve
 from tensorflow import keras
 
+import pickle
+
 from imblearn.over_sampling import SMOTE
 
 # Load the dataset
@@ -101,6 +103,14 @@ y_pred_prob = model.predict(X_test).flatten() # Get predicted probabilities for 
 y_pred = (y_pred_prob > 0.5).astype(int) # Convert probabilities
 
 print(classification_report(y_test, y_pred))
+
+
+with open('fraud_model.pkl', 'wb') as f:
+    pickle.dump(model, f)
+
+
+with open('scaler.pkl', 'wb') as f:
+    pickle.dump(scaler, f)
 
 
 
