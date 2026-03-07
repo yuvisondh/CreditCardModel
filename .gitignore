@@ -1,1 +1,10 @@
-creditcard.csv
+.venv/
+.venv_new/
+__pycache__/
+.vscode/
+*.pkl
+pytest.ini
+pytest.log
+test_main.py
+*.pyc
+.DS_Store
