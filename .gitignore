@@ -8,3 +8,4 @@ pytest.log
 test_main.py
 *.pyc
 .DS_Store
+creditcard.csv
