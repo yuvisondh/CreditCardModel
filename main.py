@@ -100,7 +100,7 @@ plt.show()
 
 # Evaluate the model on the test set
 y_pred_prob = model.predict(X_test).flatten() # Get predicted probabilities for the positive class
-y_pred = (y_pred_prob > 0.5).astype(int) # Convert probabilities
+y_pred = (y_pred_prob > 0.7).astype(int) # Convert probabilities
 
 print(classification_report(y_test, y_pred))
 
