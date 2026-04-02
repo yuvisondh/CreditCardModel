@@ -1,116 +1,181 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, average_precision_score,precision_recall_curve
-from tensorflow import keras
-
 import pickle
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from imblearn.over_sampling import SMOTE
-
-# Load the dataset
-df = pd.read_csv('creditcard.csv')
-# Check for missing values
-#print(df.isnull().sum())
-
-print(df.head())
-
-print(df.shape)
-#print(df['Class'].value_counts())
-
-
-# Split the data into training and testing sets
-
-X = df.drop('Class', axis=1) # Features (all columns except 'Class')
-y = df['Class'].astype(int).values # Target variable (the 'Class' column) or Label 
-
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,      # 20% saved for testing, 80% for training
-    random_state=42,    
-    stratify=y       
-)   
-
-# Scale the features
-scaler = StandardScaler()
-
-X_train[['Time', 'Amount']] = scaler.fit_transform(X_train[['Time', 'Amount']])
-X_test[['Time', 'Amount']]  = scaler.transform(X_test[['Time', 'Amount']])
-
-# Handle class imbalance using SMOTE
-smote = SMOTE(random_state=42)
-X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
-
-# Build the neural network model    
-model = keras.Sequential([
-    keras.layers.Dense(64, activation='relu', input_shape=(X_train_resampled.shape[1],)),
-    keras.layers.Dropout(0.3),  # Dropout layer to prevent overfitting
-
-    keras.layers.Dense(32, activation='relu'),
-    keras.layers.Dropout(0.3),
-
-    keras.layers.Dense(16, activation='relu'),
-    keras.layers.Dense(1, activation='sigmoid')  # Output layer for binary classification 0 or 1
-])
-
-model.compile(
-    optimizer='adam', # used adaptive learning rate optimization algorithm that is efficient and widely used for training deep learning models.
-    loss='binary_crossentropy', # used for binary classification problems, where the target variable has two classes (0 and 1). It measures the difference between the predicted probabilities and the actual class labels.
-    metrics=['accuracy', keras.metrics.Precision(name='precision'), keras.metrics.Recall(name='recall'), 
-             keras.metrics.AUC(curve='ROC', name='auc_roc'), keras.metrics.AUC(curve='PR', name='auc_pr')]
+from sklearn.metrics import (
+    average_precision_score,
+    classification_report,
+    confusion_matrix,
+    precision_recall_curve,
 )
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow import keras
 
 
-# Train the model
-early_stop = keras.callbacks.EarlyStopping(
-    monitor='val_loss', # monitors the validation loss during training. If the validation loss does not improve for a specified number of epochs (patience), the training will be stopped to prevent overfitting.
-    patience= 5,       # number of epochs with no improvement after which training will be stopped.
-    restore_best_weights=True # restores the model weights from the epoch with the best validation loss, ensuring that the best-performing model is retained even if training is stopped early.
-)
-history = model.fit(
-    X_train_resampled,
-    y_train_resampled,
-    epochs= 50,
-    batch_size= 2048,
-    callbacks=[early_stop],
-    validation_split=0.2, # 20% of the training data is used for validation during training. This helps to monitor the model's performance on unseen data and prevent overfitting
-    verbose=1)
-
-plt.figure(figsize=(12, 4))
-
-plt.subplot(1, 2, 1)
-plt.plot(history.history['loss'], label='Train Loss')
-plt.plot(history.history['val_loss'], label='Val Loss')
-plt.title('Loss Over Epochs')
-plt.legend()
-
-plt.subplot(1, 2, 2)
-plt.plot(history.history['accuracy'], label='Train Accuracy')
-plt.plot(history.history['val_accuracy'], label='Val Accuracy')
-plt.title('Accuracy Over Epochs')
-plt.legend()
-
-plt.show()
-
-# Evaluate the model on the test set
-y_pred_prob = model.predict(X_test).flatten() # Get predicted probabilities for the positive class
-y_pred = (y_pred_prob > 0.7).astype(int) # Convert probabilities
-
-print(classification_report(y_test, y_pred))
+def load_data(filepath: str) -> pd.DataFrame:
+    df = pd.read_csv(filepath)
+    if df.isnull().any().any():
+        raise ValueError("Dataset contains missing values.")
+    return df
 
 
-with open('fraud_model.pkl', 'wb') as f:
-    pickle.dump(model, f)
+def preprocess(df: pd.DataFrame):
+    X = df.drop("Class", axis=1)
+    y = df["Class"].astype(int).values
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    scaler = StandardScaler()
+    X_train[["Time", "Amount"]] = scaler.fit_transform(X_train[["Time", "Amount"]])
+    X_test[["Time", "Amount"]] = scaler.transform(X_test[["Time", "Amount"]])
+
+    smote = SMOTE(random_state=42)
+    X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+    return X_train_res, X_test, y_train_res, y_test, scaler
 
 
-with open('scaler.pkl', 'wb') as f:
-    pickle.dump(scaler, f)
+def build_model(input_dim: int) -> keras.Model:
+    model = keras.Sequential(
+        [
+            keras.layers.Dense(64, activation="relu", input_shape=(input_dim,)),
+            keras.layers.Dropout(0.3),
+            keras.layers.Dense(32, activation="relu"),
+            keras.layers.Dropout(0.3),
+            keras.layers.Dense(16, activation="relu"),
+            keras.layers.Dense(1, activation="sigmoid"),
+        ]
+    )
+    model.compile(
+        optimizer="adam",
+        loss="binary_crossentropy",
+        metrics=[
+            "accuracy",
+            keras.metrics.Precision(name="precision"),
+            keras.metrics.Recall(name="recall"),
+            keras.metrics.AUC(curve="ROC", name="auc_roc"),
+            keras.metrics.AUC(curve="PR", name="auc_pr"),
+        ],
+    )
+    return model
+
+
+def train_model(model: keras.Model, X_train, y_train) -> keras.callbacks.History:
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=5,
+        restore_best_weights=True,
+    )
+    history = model.fit(
+        X_train,
+        y_train,
+        epochs=50,
+        batch_size=2048,
+        validation_split=0.2,
+        callbacks=[early_stop],
+        verbose=1,
+    )
+    return history
+
+
+def plot_training_history(history: keras.callbacks.History):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    axes[0].plot(history.history["loss"], label="Train Loss")
+    axes[0].plot(history.history["val_loss"], label="Val Loss")
+    axes[0].set_title("Loss Over Epochs")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].legend()
+
+    axes[1].plot(history.history["accuracy"], label="Train Accuracy")
+    axes[1].plot(history.history["val_accuracy"], label="Val Accuracy")
+    axes[1].set_title("Accuracy Over Epochs")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("Accuracy")
+    axes[1].legend()
+
+    plt.tight_layout()
+    plt.savefig("training_history.png", dpi=150)
+    plt.show()
+
+
+def evaluate_model(model: keras.Model, X_test, y_test, threshold: float = 0.7):
+    y_pred_prob = model.predict(X_test).flatten()
+    y_pred = (y_pred_prob > threshold).astype(int)
+
+    print("\n=== Classification Report ===")
+    print(classification_report(y_test, y_pred, target_names=["Legitimate", "Fraud"]))
+
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["Legitimate", "Fraud"],
+        yticklabels=["Legitimate", "Fraud"],
+    )
+    plt.title("Confusion Matrix")
+    plt.ylabel("Actual")
+    plt.xlabel("Predicted")
+    plt.tight_layout()
+    plt.savefig("confusion_matrix.png", dpi=150)
+    plt.show()
+
+    precision, recall, _ = precision_recall_curve(y_test, y_pred_prob)
+    avg_precision = average_precision_score(y_test, y_pred_prob)
+    plt.figure(figsize=(7, 5))
+    plt.plot(recall, precision, label=f"AP = {avg_precision:.4f}")
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curve")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("precision_recall_curve.png", dpi=150)
+    plt.show()
+
+
+def save_artifacts(model: keras.Model, scaler: StandardScaler):
+    model.save("fraud_model.keras")
+    with open("scaler.pkl", "wb") as f:
+        pickle.dump(scaler, f)
+    print("Saved fraud_model.keras and scaler.pkl")
+
+
+def main():
+    print("Loading data...")
+    df = load_data("creditcard.csv")
+    print(f"Dataset shape: {df.shape}")
+
+    print("\nPreprocessing...")
+    X_train, X_test, y_train, y_test, scaler = preprocess(df)
+    print(f"Training samples after SMOTE: {X_train.shape[0]}")
+
+    print("\nBuilding model...")
+    model = build_model(input_dim=X_train.shape[1])
+    model.summary()
+
+    print("\nTraining model...")
+    history = train_model(model, X_train, y_train)
+    plot_training_history(history)
+
+    print("\nEvaluating model...")
+    evaluate_model(model, X_test, y_test, threshold=0.7)
+
+    print("\nSaving artifacts...")
+    save_artifacts(model, scaler)
+
+
+if __name__ == "__main__":
+    main()
 
 
 
