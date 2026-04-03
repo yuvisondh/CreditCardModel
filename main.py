@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from imblearn.over_sampling import SMOTE
 from sklearn.metrics import (
     average_precision_score,
     classification_report,
@@ -13,6 +12,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils.class_weight import compute_class_weight
 from tensorflow import keras
 
 
@@ -35,26 +35,29 @@ def preprocess(df: pd.DataFrame):
     X_train[["Time", "Amount"]] = scaler.fit_transform(X_train[["Time", "Amount"]])
     X_test[["Time", "Amount"]] = scaler.transform(X_test[["Time", "Amount"]])
 
-    smote = SMOTE(random_state=42)
-    X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+    # Use class weights instead of SMOTE to avoid synthetic data artifacts
+    classes = np.unique(y_train)
+    weights = compute_class_weight("balanced", classes=classes, y=y_train)
+    class_weight = dict(zip(classes, weights))
 
-    return X_train_res, X_test, y_train_res, y_test, scaler
+    return X_train, X_test, y_train, y_test, scaler, class_weight
 
 
 def build_model(input_dim: int) -> keras.Model:
+    reg = keras.regularizers.l2(1e-3)
     model = keras.Sequential(
         [
-            keras.layers.Dense(64, activation="relu", input_shape=(input_dim,)),
+            keras.layers.Dense(32, activation="relu", input_shape=(input_dim,),
+                               kernel_regularizer=reg),
             keras.layers.Dropout(0.3),
-            keras.layers.Dense(32, activation="relu"),
+            keras.layers.Dense(16, activation="relu", kernel_regularizer=reg),
             keras.layers.Dropout(0.3),
-            keras.layers.Dense(16, activation="relu"),
             keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
     model.compile(
-        optimizer="adam",
-        loss="binary_crossentropy",
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        loss=keras.losses.BinaryCrossentropy(label_smoothing=0.05),
         metrics=[
             "accuracy",
             keras.metrics.Precision(name="precision"),
@@ -66,7 +69,7 @@ def build_model(input_dim: int) -> keras.Model:
     return model
 
 
-def train_model(model: keras.Model, X_train, y_train) -> keras.callbacks.History:
+def train_model(model: keras.Model, X_train, y_train, class_weight) -> keras.callbacks.History:
     early_stop = keras.callbacks.EarlyStopping(
         monitor="val_loss",
         patience=5,
@@ -78,6 +81,7 @@ def train_model(model: keras.Model, X_train, y_train) -> keras.callbacks.History
         epochs=50,
         batch_size=2048,
         validation_split=0.2,
+        class_weight=class_weight,
         callbacks=[early_stop],
         verbose=1,
     )
@@ -145,9 +149,11 @@ def evaluate_model(model: keras.Model, X_test, y_test, threshold: float = 0.7):
 
 def save_artifacts(model: keras.Model, scaler: StandardScaler):
     model.save("fraud_model.keras")
+    with open("fraud_model.pkl", "wb") as f:
+        pickle.dump(model, f)
     with open("scaler.pkl", "wb") as f:
         pickle.dump(scaler, f)
-    print("Saved fraud_model.keras and scaler.pkl")
+    print("Saved fraud_model.keras, fraud_model.pkl, and scaler.pkl")
 
 
 def main():
@@ -156,15 +162,16 @@ def main():
     print(f"Dataset shape: {df.shape}")
 
     print("\nPreprocessing...")
-    X_train, X_test, y_train, y_test, scaler = preprocess(df)
-    print(f"Training samples after SMOTE: {X_train.shape[0]}")
+    X_train, X_test, y_train, y_test, scaler, class_weight = preprocess(df)
+    print(f"Training samples: {X_train.shape[0]}")
+    print(f"Class weights: {class_weight}")
 
     print("\nBuilding model...")
     model = build_model(input_dim=X_train.shape[1])
     model.summary()
 
     print("\nTraining model...")
-    history = train_model(model, X_train, y_train)
+    history = train_model(model, X_train, y_train, class_weight)
     plot_training_history(history)
 
     print("\nEvaluating model...")
